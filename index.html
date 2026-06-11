@@ -78,108 +78,120 @@ const MODEL_URL =
 "https://teachablemachine.withgoogle.com/models/hAoLBlbtq/";
 
 let model;
-let score=0;
-let misses=0;
+let score = 0;
+let misses = 0;
 
-const video=document.getElementById("webcam");
-const canvas=document.getElementById("gameCanvas");
-const ctx=canvas.getContext("2d");
+const video = document.getElementById("webcam");
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-let bowl={
-    x:canvas.width/2,
-    y:canvas.height-120,
-    width:160,
-    height:70
+let bowl = {
+    x: canvas.width / 2,
+    y: canvas.height - 120,
+    width: 160,
+    height: 70
 };
 
-let fruits=[];
+let fruits = [];
 
-function spawnFruit(){
+function spawnFruit() {
 
-    const emojis=["🍎","🍌","🍊","🍇"];
+    const emojis = ["🍎","🍌","🍊","🍇"];
 
     fruits.push({
-        x:Math.random()*canvas.width,
-        y:-50,
-        speed:3+Math.random()*3,
-        emoji:emojis[Math.floor(Math.random()*emojis.length)]
+        x: Math.random() * (canvas.width - 100) + 50,
+        y: -50,
+        speed: 3 + Math.random() * 3,
+        emoji: emojis[Math.floor(Math.random() * emojis.length)]
     });
+
 }
 
-setInterval(spawnFruit,1000);
+setInterval(spawnFruit, 1000);
 
-async function init(){
+async function init() {
 
-    model=await tmPose.load(
-        MODEL_URL+"model.json",
-        MODEL_URL+"metadata.json"
+    console.log("Loading model...");
+
+    model = await tmPose.load(
+        MODEL_URL + "model.json",
+        MODEL_URL + "metadata.json"
     );
 
-    const stream=
-    await navigator.mediaDevices.getUserMedia({
-        video:true
-    });
+    console.log("Model loaded");
 
-    video.srcObject=stream;
+    const stream =
+        await navigator.mediaDevices.getUserMedia({
+            video: true
+        });
 
-    requestAnimationFrame(loop);
+    video.srcObject = stream;
+
+    video.onloadeddata = () => {
+
+        console.log("Video ready");
+
+        requestAnimationFrame(loop);
+
+    };
+
 }
 
-async function predict(){
+async function predict() {
 
-    const {posenetOutput}=
-    await model.estimatePose(video);
-
-    const prediction=
-    await model.predict(posenetOutput);
-
-    const left=
-    prediction.find(
-    p=>p.className==="left"
-    ).probability;
-
-    const right=
-    prediction.find(
-    p=>p.className==="right"
-    ).probability;
-
-    if(left>0.9){
-        bowl.x-=15;
+    if (video.readyState < 2) {
+        return;
     }
 
-    if(right>0.9){
-        bowl.x+=15;
+    const { posenetOutput } =
+        await model.estimatePose(video);
+
+    const prediction =
+        await model.predict(posenetOutput);
+
+    const left =
+        prediction.find(
+            p => p.className === "left"
+        )?.probability || 0;
+
+    const right =
+        prediction.find(
+            p => p.className === "right"
+        )?.probability || 0;
+
+    if (left > 0.9 && left > right) {
+        bowl.x -= 15;
     }
 
-    bowl.x=Math.max(
+    if (right > 0.9 && right > left) {
+        bowl.x += 15;
+    }
+
+    bowl.x = Math.max(
         80,
-        Math.min(
-            canvas.width-80,
-            bowl.x
-        )
+        Math.min(canvas.width - 80, bowl.x)
     );
 
-    document.getElementById(
-    "prediction").innerText=
-    left>right
-    ? "LEFT "+Math.round(left*100)+"%"
-    : "RIGHT "+Math.round(right*100)+"%";
+    document.getElementById("prediction").innerText =
+        left > right
+            ? "LEFT " + Math.round(left * 100) + "%"
+            : "RIGHT " + Math.round(right * 100) + "%";
 }
 
-function drawBackground(){
+function drawBackground() {
 
-    const g=
-    ctx.createLinearGradient(
-        0,0,0,canvas.height
-    );
+    const gradient =
+        ctx.createLinearGradient(
+            0, 0, 0, canvas.height
+        );
 
-    g.addColorStop(0,"#8B5A2B");
-    g.addColorStop(1,"#5C3317");
+    gradient.addColorStop(0, "#9b6b3d");
+    gradient.addColorStop(1, "#6b3e1f");
 
-    ctx.fillStyle=g;
+    ctx.fillStyle = gradient;
     ctx.fillRect(
         0,
         0,
@@ -187,100 +199,85 @@ function drawBackground(){
         canvas.height
     );
 
-    for(let i=0;i<20;i++){
-
-        ctx.strokeStyle=
+    ctx.strokeStyle =
         "rgba(255,255,255,0.05)";
 
+    for(let i = 0; i < canvas.width; i += 100){
+
         ctx.beginPath();
-
-        ctx.moveTo(i*100,0);
-
-        ctx.lineTo(
-            i*100,
-            canvas.height
-        );
-
+        ctx.moveTo(i,0);
+        ctx.lineTo(i,canvas.height);
         ctx.stroke();
+
     }
+
 }
 
-function drawGame(){
+function drawGame() {
 
     drawBackground();
 
-    ctx.font="50px serif";
+    ctx.font = "50px serif";
 
-    fruits.forEach((f,index)=>{
+    for(let i = fruits.length - 1; i >= 0; i--){
 
-        f.y+=f.speed;
+        let fruit = fruits[i];
+
+        fruit.y += fruit.speed;
 
         ctx.fillText(
-            f.emoji,
-            f.x,
-            f.y
+            fruit.emoji,
+            fruit.x,
+            fruit.y
         );
 
         if(
-            f.y>bowl.y-20 &&
-            f.x>bowl.x-70 &&
-            f.x<bowl.x+70
+            fruit.y > bowl.y - 20 &&
+            fruit.x > bowl.x - 80 &&
+            fruit.x < bowl.x + 80
         ){
 
             score++;
 
-            document
-            .getElementById(
-            "score")
-            .innerText=
-            "Score: "+score;
+            document.getElementById(
+                "score"
+            ).innerText =
+                "Score: " + score;
 
-            fruits.splice(
-            index,
-            1
-            );
+            fruits.splice(i,1);
+
+            continue;
         }
 
         if(
-        f.y>
-        canvas.height+50
+            fruit.y >
+            canvas.height + 50
         ){
 
             misses++;
 
-            fruits.splice(
-            index,
-            1
-            );
+            fruits.splice(i,1);
 
-            let hearts=
-            "❤️".repeat(
-            Math.max(
-            0,
-            3-misses
-            ));
-
-            document
-            .getElementById(
-            "lives")
-            .innerText=
-            hearts;
-
-            if(
-            misses>=3
-            ){
-                alert(
-                "Game Over!\nScore: "
-                +score
+            document.getElementById(
+                "lives"
+            ).innerText =
+                "❤️".repeat(
+                    Math.max(0, 3 - misses)
                 );
+
+            if(misses >= 3){
+
+                alert(
+                    "Game Over!\nScore: " + score
+                );
+
                 location.reload();
             }
         }
 
-    });
+    }
 
-    ctx.fillStyle=
-    "#4A2E15";
+    ctx.fillStyle = "#5c2f13";
 
     ctx.beginPath();
 
@@ -291,26 +288,36 @@ function drawGame(){
         35,
         0,
         0,
-        Math.PI*2
+        Math.PI * 2
     );
 
     ctx.fill();
+
 }
 
-async function loop(){
+async function loop() {
 
-    await predict();
+    try {
 
-    drawGame();
+        if(video.readyState >= 2){
 
-    requestAnimationFrame(
-    loop
-    );
+            await predict();
+
+            drawGame();
+        }
+
+    } catch(error){
+
+        console.error(error);
+
+    }
+
+    requestAnimationFrame(loop);
+
 }
 
 init();
 
 </script>
-
 </body>
 </html>
