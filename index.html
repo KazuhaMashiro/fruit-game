@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Pose Fruit Catcher</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@latest"></script>
+<style>
+body{margin:0;overflow:hidden;background:#000;font-family:Arial}
+#webcam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#game{position:fixed;inset:0}
+#ui{position:fixed;top:15px;left:15px;color:white;font-size:28px;font-weight:bold}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:red;font-size:64px;font-weight:bold;display:none}
+</style>
+</head>
+<body>
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="game"></canvas>
+<div id="ui">Score: <span id="score">0</span><br>Lives: <span id="lives">3</span></div>
+<div id="msg">GAME OVER<br><button onclick="location.reload()">Restart</button></div>
+
+<script>
+const MODEL_URL="https://teachablemachine.withgoogle.com/models/hAoLBlbtq/";
+let model;
+let score=0,lives=3,playing=true;
+
+const video=document.getElementById("webcam");
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+ canvas.width=innerWidth;
+ canvas.height=innerHeight;
+}
+resize();
+addEventListener("resize",resize);
+
+let bowl={x:innerWidth/2,y:innerHeight-100,w:140,h:40};
+let fruit=newFruit();
+
+function newFruit(){
+ return {
+  x:Math.random()*(canvas.width-60)+30,
+  y:-50,
+  r:25,
+  speed:4+Math.random()*3
+ };
+}
+
+async function init(){
+ model=await tmPose.load(MODEL_URL+"model.json",MODEL_URL+"metadata.json");
+
+ const stream=await navigator.mediaDevices.getUserMedia({video:true});
+ video.srcObject=stream;
+
+ video.onloadeddata=()=>loop();
+}
+
+async function poseControl(){
+ const {posenetOutput}=await model.estimatePose(video);
+ const pred=await model.predict(posenetOutput);
+
+ const left=pred.find(p=>p.className==="left")?.probability||0;
+ const right=pred.find(p=>p.className==="right")?.probability||0;
+
+ if(left>0.85 && left>right){
+   bowl.x-=20;
+ }
+ else if(right>0.85 && right>left){
+   bowl.x+=20;
+ }
+
+ bowl.x=Math.max(bowl.w/2,Math.min(canvas.width-bowl.w/2,bowl.x));
+}
+
+function update(){
+ fruit.y+=fruit.speed;
+
+ let catchFruit=
+ fruit.y+fruit.r>bowl.y &&
+ fruit.x>bowl.x-bowl.w/2 &&
+ fruit.x<bowl.x+bowl.w/2;
+
+ if(catchFruit){
+   score++;
+   document.getElementById("score").textContent=score;
+   fruit=newFruit();
+ }
+
+ if(fruit.y>canvas.height+fruit.r){
+   lives--;
+   document.getElementById("lives").textContent=lives;
+   fruit=newFruit();
+
+   if(lives<=0){
+     playing=false;
+     document.getElementById("msg").style.display="block";
+   }
+ }
+}
+
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ ctx.fillStyle="orange";
+ ctx.beginPath();
+ ctx.arc(fruit.x,fruit.y,fruit.r,0,Math.PI*2);
+ ctx.fill();
+
+ ctx.fillStyle="#8B4513";
+ ctx.beginPath();
+ ctx.ellipse(bowl.x,bowl.y,bowl.w/2,bowl.h/2,0,0,Math.PI*2);
+ ctx.fill();
+}
+
+async function loop(){
+ if(!playing)return;
+
+ await poseControl();
+ update();
+ draw();
+
+ requestAnimationFrame(loop);
+}
+
+init();
+</script>
+</body>
+</html>
