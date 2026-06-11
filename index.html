@@ -2,16 +2,17 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Fruit Catcher</title>
+<title>Pose Fruit Catcher</title>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.5/dist/teachablemachine-pose.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
 
 <style>
-body{
+
+html,body{
     margin:0;
     overflow:hidden;
-    font-family:Arial;
+    font-family:Arial,sans-serif;
 }
 
 #gameCanvas{
@@ -21,50 +22,76 @@ body{
 
 #webcam{
     position:absolute;
-    top:20px;
-    left:20px;
-    width:250px;
-    height:180px;
+    top:15px;
+    left:15px;
+    width:260px;
+    height:190px;
     border:4px solid white;
     border-radius:15px;
     object-fit:cover;
     transform:scaleX(-1);
-    z-index:10;
+    z-index:100;
 }
 
 #prediction{
     position:absolute;
-    top:210px;
+    top:215px;
     left:20px;
     color:white;
     font-size:28px;
     font-weight:bold;
-    z-index:10;
+    z-index:100;
 }
 
 #score{
     position:absolute;
-    right:20px;
     top:20px;
+    right:20px;
     color:white;
     font-size:40px;
     font-weight:bold;
+    z-index:100;
 }
 
 #lives{
     position:absolute;
-    right:20px;
     top:80px;
-    color:white;
+    right:20px;
     font-size:40px;
+    z-index:100;
 }
+
+#gameOver{
+    position:absolute;
+    inset:0;
+    background:rgba(0,0,0,0.8);
+    color:white;
+    display:none;
+    justify-content:center;
+    align-items:center;
+    flex-direction:column;
+    font-size:60px;
+    z-index:500;
+}
+
+button{
+    padding:15px 30px;
+    font-size:28px;
+    cursor:pointer;
+}
+
 </style>
 </head>
+
 <body>
 
 <canvas id="gameCanvas"></canvas>
 
-<video id="webcam" autoplay playsinline muted></video>
+<video
+id="webcam"
+autoplay
+playsinline
+muted></video>
 
 <div id="prediction">Loading...</div>
 
@@ -72,256 +99,424 @@ body{
 
 <div id="lives">❤️❤️❤️</div>
 
+<div id="gameOver">
+<div>GAME OVER</div>
+<div id="finalScore"></div>
+<br>
+<button onclick="location.reload()">
+Restart
+</button>
+</div>
+
 <script>
+
+let model;
 
 const MODEL_URL = "./model.json";
 const METADATA_URL = "./metadata.json";
 
-model = await tmPose.load(
-    MODEL_URL,
-    METADATA_URL
-);
-let model;
-let score = 0;
-let misses = 0;
+const canvas =
+document.getElementById("gameCanvas");
 
-const video = document.getElementById("webcam");
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx =
+canvas.getContext("2d");
+
+const video =
+document.getElementById("webcam");
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+window.addEventListener(
+"resize",
+()=>{
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+}
+);
+
+let score = 0;
+let misses = 0;
+
 let bowl = {
-    x: canvas.width / 2,
-    y: canvas.height - 120,
-    width: 160,
-    height: 70
+x: canvas.width/2,
+y: canvas.height-110,
+width:150,
+height:60
 };
+
+const fruitEmojis =
+["🍎","🍌","🍊","🍇"];
 
 let fruits = [];
 
-function spawnFruit() {
+function spawnFruit(){
 
-    const emojis = ["🍎","🍌","🍊","🍇"];
+fruits.push({
 
-    fruits.push({
-        x: Math.random() * (canvas.width - 100) + 50,
-        y: -50,
-        speed: 3 + Math.random() * 3,
-        emoji: emojis[Math.floor(Math.random() * emojis.length)]
-    });
+x:
+Math.random()*
+(canvas.width-100)+50,
 
-}
+y:-50,
 
-setInterval(spawnFruit, 1000);
+speed:
+3+
+Math.random()*4,
 
-async function init() {
+emoji:
+fruitEmojis[
+Math.floor(
+Math.random()*
+fruitEmojis.length
+)
+]
 
-    console.log("Loading model...");
-
-    model = await tmPose.load(
-        MODEL_URL + "model.json",
-        MODEL_URL + "metadata.json"
-    );
-
-    console.log("Model loaded");
-
-    const stream =
-        await navigator.mediaDevices.getUserMedia({
-            video: true
-        });
-
-    video.srcObject = stream;
-
-    video.onloadeddata = () => {
-
-        console.log("Video ready");
-
-        requestAnimationFrame(loop);
-
-    };
+});
 
 }
 
-async function predict() {
+setInterval(
+spawnFruit,
+1000
+);
 
-    if (video.readyState < 2) {
-        return;
-    }
+async function init(){
 
-    const { posenetOutput } =
-        await model.estimatePose(video);
+console.log("Loading model");
 
-    const prediction =
-        await model.predict(posenetOutput);
+model =
+await tmPose.load(
+MODEL_URL,
+METADATA_URL
+);
 
-    const left =
-        prediction.find(
-            p => p.className === "left"
-        )?.probability || 0;
+console.log("Model loaded");
 
-    const right =
-        prediction.find(
-            p => p.className === "right"
-        )?.probability || 0;
+const stream =
+await navigator
+.mediaDevices
+.getUserMedia({
+video:true
+});
 
-    if (left > 0.9 && left > right) {
-        bowl.x -= 15;
-    }
+video.srcObject =
+stream;
 
-    if (right > 0.9 && right > left) {
-        bowl.x += 15;
-    }
+video.onloadeddata =
+()=>{
 
-    bowl.x = Math.max(
-        80,
-        Math.min(canvas.width - 80, bowl.x)
-    );
+console.log(
+"Video ready"
+);
 
-    document.getElementById("prediction").innerText =
-        left > right
-            ? "LEFT " + Math.round(left * 100) + "%"
-            : "RIGHT " + Math.round(right * 100) + "%";
-}
+requestAnimationFrame(
+loop
+);
 
-function drawBackground() {
-
-    const gradient =
-        ctx.createLinearGradient(
-            0, 0, 0, canvas.height
-        );
-
-    gradient.addColorStop(0, "#9b6b3d");
-    gradient.addColorStop(1, "#6b3e1f");
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
-
-    ctx.strokeStyle =
-        "rgba(255,255,255,0.05)";
-
-    for(let i = 0; i < canvas.width; i += 100){
-
-        ctx.beginPath();
-        ctx.moveTo(i,0);
-        ctx.lineTo(i,canvas.height);
-        ctx.stroke();
-
-    }
+};
 
 }
 
-function drawGame() {
+async function predict(){
 
-    drawBackground();
+if(
+video.readyState < 2
+){
+return;
+}
 
-    ctx.font = "50px serif";
+const poseData =
+await model
+.estimatePose(video);
 
-    for(let i = fruits.length - 1; i >= 0; i--){
+const prediction =
+await model.predict(
+poseData.posenetOutput
+);
 
-        let fruit = fruits[i];
+const left =
+prediction.find(
+p=>p.className==="left"
+)?.probability || 0;
 
-        fruit.y += fruit.speed;
+const right =
+prediction.find(
+p=>p.className==="right"
+)?.probability || 0;
 
-        ctx.fillText(
-            fruit.emoji,
-            fruit.x,
-            fruit.y
-        );
+if(
+left > 0.85 &&
+left > right
+){
+bowl.x -= 18;
+}
 
-        if(
-            fruit.y > bowl.y - 20 &&
-            fruit.x > bowl.x - 80 &&
-            fruit.x < bowl.x + 80
-        ){
+if(
+right > 0.85 &&
+right > left
+){
+bowl.x += 18;
+}
 
-            score++;
+bowl.x =
+Math.max(
+75,
+Math.min(
+canvas.width-75,
+bowl.x
+)
+);
 
-            document.getElementById(
-                "score"
-            ).innerText =
-                "Score: " + score;
-
-            fruits.splice(i,1);
-
-            continue;
-        }
-
-        if(
-            fruit.y >
-            canvas.height + 50
-        ){
-
-            misses++;
-
-            fruits.splice(i,1);
-
-            document.getElementById(
-                "lives"
-            ).innerText =
-                "❤️".repeat(
-                    Math.max(0, 3 - misses)
-                );
-
-            if(misses >= 3){
-
-                alert(
-                    "Game Over!\nScore: " + score
-                );
-
-                location.reload();
-            }
-        }
-
-    }
-
-    ctx.fillStyle = "#5c2f13";
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        bowl.x,
-        bowl.y,
-        80,
-        35,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
+document
+.getElementById(
+"prediction"
+)
+.innerText =
+left > right
+?
+"LEFT "+
+Math.round(
+left*100
+)+"%"
+:
+"RIGHT "+
+Math.round(
+right*100
+)+"%";
 
 }
 
-async function loop() {
+function drawBackground(){
 
-    try {
+const g =
+ctx.createLinearGradient(
+0,
+0,
+0,
+canvas.height
+);
 
-        if(video.readyState >= 2){
+g.addColorStop(
+0,
+"#9b6b3d"
+);
 
-            await predict();
+g.addColorStop(
+1,
+"#5f371c"
+);
 
-            drawGame();
-        }
+ctx.fillStyle = g;
 
-    } catch(error){
+ctx.fillRect(
+0,
+0,
+canvas.width,
+canvas.height
+);
 
-        console.error(error);
+ctx.strokeStyle =
+"rgba(255,255,255,0.06)";
 
-    }
+for(
+let i=0;
+i<canvas.width;
+i+=100
+){
 
-    requestAnimationFrame(loop);
+ctx.beginPath();
+
+ctx.moveTo(i,0);
+
+ctx.lineTo(
+i,
+canvas.height
+);
+
+ctx.stroke();
+
+}
+
+}
+
+function drawBowl(){
+
+ctx.fillStyle =
+"#5b2d12";
+
+ctx.beginPath();
+
+ctx.ellipse(
+bowl.x,
+bowl.y,
+80,
+35,
+0,
+0,
+Math.PI*2
+);
+
+ctx.fill();
+
+ctx.strokeStyle =
+"#a76b3c";
+
+ctx.lineWidth = 4;
+
+ctx.stroke();
+
+}
+
+function updateFruits(){
+
+ctx.font =
+"50px serif";
+
+for(
+let i=
+fruits.length-1;
+i>=0;
+i--
+){
+
+let fruit =
+fruits[i];
+
+fruit.y +=
+fruit.speed;
+
+ctx.fillText(
+fruit.emoji,
+fruit.x,
+fruit.y
+);
+
+if(
+
+fruit.y >
+bowl.y-25 &&
+
+fruit.x >
+bowl.x-80 &&
+
+fruit.x <
+bowl.x+80
+
+){
+
+score++;
+
+document
+.getElementById(
+"score"
+)
+.innerText =
+"Score: "+
+score;
+
+fruits.splice(
+i,
+1
+);
+
+continue;
+
+}
+
+if(
+fruit.y >
+canvas.height+50
+){
+
+misses++;
+
+fruits.splice(
+i,
+1
+);
+
+document
+.getElementById(
+"lives"
+)
+.innerText =
+"❤️".repeat(
+Math.max(
+0,
+3-misses
+)
+);
+
+if(
+misses >= 3
+){
+
+document
+.getElementById(
+"gameOver"
+)
+.style.display =
+"flex";
+
+document
+.getElementById(
+"finalScore"
+)
+.innerText =
+"Score: "+
+score;
+
+return;
+}
+
+}
+
+}
+
+}
+
+function drawGame(){
+
+drawBackground();
+
+updateFruits();
+
+drawBowl();
+
+}
+
+async function loop(){
+
+if(
+misses >= 3
+){
+return;
+}
+
+try{
+
+await predict();
+
+drawGame();
+
+}catch(err){
+
+console.error(
+err
+);
+
+}
+
+requestAnimationFrame(
+loop
+);
 
 }
 
 init();
 
 </script>
+
 </body>
 </html>
