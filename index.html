@@ -74,9 +74,13 @@ body{
 
 <script>
 
-const MODEL_URL =
-"https://teachablemachine.withgoogle.com/models/hAoLBlbtq/";
+const MODEL_URL = "./model.json";
+const METADATA_URL = "./metadata.json";
 
+model = await tmPose.load(
+    MODEL_URL,
+    METADATA_URL
+);
 let model;
 let score = 0;
 let misses = 0;
